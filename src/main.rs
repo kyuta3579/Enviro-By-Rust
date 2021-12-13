@@ -11,6 +11,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         pin.set_high();
         thread::sleep(Duration::from_secs(1));
         pin.set_low();
+        thread::sleep(Duration::from_secs(1));
     }
-
 }
