@@ -1,11 +1,14 @@
 use linux_embedded_hal::{Delay, I2cdev};
 use bme280::BME280;
 use ltr_559::{Ltr559, SlaveAddr, AlsGain, AlsIntTime, AlsMeasRate};
-
 use std::error::Error;
+use alsa::{Direction, ValueOr};
+use alsa::pcm::{PCM, HwParams, Format, Access, State};
 use rppal::gpio::Gpio;
 
 fn main() {
+
+    let pcm = PCM::new("sndrpii2scard", Direction::Capture, false).unwrap();
 
     // using Linux I2C Bus #1 in this example
     let i2c_bme280 = I2cdev::new("/dev/i2c-1").unwrap();
