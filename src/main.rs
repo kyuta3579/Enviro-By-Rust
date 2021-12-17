@@ -4,6 +4,9 @@ use ltr_559::{Ltr559, SlaveAddr, AlsGain, AlsIntTime, AlsMeasRate};
 use alsa::{Direction, ValueOr, Error};
 use alsa::pcm::{PCM, HwParams, Format, Access, State};
 use std::ffi::{CString, CStr};
+use std::io::{stdout, Write, BufWriter};
+use std::thread::sleep;
+use std::time::Duration;
 
 use rppal::gpio::Gpio;
 
@@ -37,20 +40,24 @@ fn main() {
     let swp = pcm.sw_params_current().unwrap();
     pcm.sw_params(&swp).unwrap();
 
+    
+
     loop {
+        let out = stdout();
+        let mut out = BufWriter::new(out.lock());
+        writeln!(out, "\x1B[2J");
+        writeln!(out, "\x1B[0;0H");
         let status = sensor.get_status().unwrap();
         if status.als_data_valid {
             let (lux_raw_0, lux_raw_1) = sensor.get_als_raw_data().unwrap();
             let lux = sensor.get_lux().unwrap();
-            println!(
-                "Raw Lux CH1: 0x{:04x}, CH0: 0x{:04x} Lux = {}, Status.als_data_valid = {}",
-                lux_raw_0, lux_raw_1, lux, status.als_data_valid
-            );
+            writeln!(out, "Lux = {}", lux);
         }
         let measurements = bme280.measure().unwrap();
-        println!("Relative Humidity = {}%", measurements.humidity);
-        println!("Temperature = {} deg C", measurements.temperature);
-        println!("Pressure = {} pascals", measurements.pressure);
+        writeln!(out, 
+            "Humidity = {}%, Temperature = {}degC, Pressure = {}hpa",
+            measurements.humidity, measurements.temperature, (measurements.pressure / 100.00)
+        );
 
         {
             let mut soundbuf = [0i32; 8192];
@@ -69,19 +76,32 @@ fn main() {
 
             match ret {
                 Ok(size) => {
-                    println!("read size is {}", size);
-                    let mut max = 0;
+                    // writeln!(out, "read size is {}", size);
+                    let mut prev = 0;
+                    let mut preprev = 0;
+                    let mut peak = [0;2];
+                    let mut maxamp = 0;
                     for amplitude in soundbuf.iter() {
-                        if max < amplitude.abs() {
-                            max = amplitude.abs()
+                        if prev > preprev && prev > *amplitude {
+                            peak[0] = prev;
+                        } else if prev < preprev && prev < *amplitude {
+                            peak[1] = prev;
                         }
+                        if !(peak[0] == 0 || peak[1] == 0) {
+                            if maxamp < (peak[0] - peak[1]) {
+                                maxamp = peak[0] - peak[1];
+                            }
+                        }
+                        preprev = prev;
+                        prev = *amplitude;
                     }
-                    println!("amplitude: {}", max / 1000000);
+                    writeln!(out, "sound amplitude: {}", maxamp.abs() / 1000000);
                 },
                 Err(err) => {
                     println!("no input.{:?}", err);
                 },
             };
         }
+        sleep(Duration::from_millis(1));
     }
 }
